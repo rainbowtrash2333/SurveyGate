@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}管理员仪表板 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>管理员仪表板</h1>
+
+<div class="breadcrumb">
+    <span>管理首页</span>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card" style="background: linear-gradient(135deg, #3498db, #2980b9);">
+        <h3>{{ user_count }}</h3>
+        <p>注册用户</p>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #27ae60, #219a52);">
+        <h3>{{ survey_count }}</h3>
+        <p>问卷数量</p>
+    </div>
+    
+    <div class="stat-card" style="background: linear-gradient(135deg, #f39c12, #e67e22);">
+        <h3>{{ attempt_count }}</h3>
+        <p>答题记录</p>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>用户管理</h3>
+        </div>
+        <div class="card-body">
+            <p>管理系统用户，添加、删除用户账号</p>
+            <div style="margin-top: 15px;">
+                <a href="{{ url_for('admin_users') }}" class="btn">查看所有用户</a>
+                <a href="{{ url_for('admin_add_user') }}" class="btn btn-success">添加用户</a>
+                <a href="{{ url_for('admin_import_users') }}" class="btn btn-warning">批量导入</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>问卷管理</h3>
+        </div>
+        <div class="card-body">
+            <p>管理系统问卷，设置活跃状态和问卷信息</p>
+            <div style="margin-top: 15px;">
+                <a href="{{ url_for('admin_surveys') }}" class="btn">查看所有问卷</a>
+                <a href="{{ url_for('admin_add_survey') }}" class="btn btn-success">添加问卷</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>系统配置</h3>
+        </div>
+        <div class="card-body">
+            <p>配置 LimeSurvey 连接参数和系统设置</p>
+            <div style="margin-top: 15px;">
+                <a href="{{ url_for('admin_config') }}" class="btn btn-warning">配置系统</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

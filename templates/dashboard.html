@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}用户仪表板 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>我的问卷</h1>
+
+<div class="breadcrumb">
+    <span>首页 > 我的问卷</span>
+</div>
+
+{% if surveys %}
+    <div style="margin-bottom: 20px;">
+        <p>当前有 <strong>{{ surveys|length }}</strong> 个活跃问卷可以填写</p>
+    </div>
+
+    {% for survey in surveys %}
+        <div class="survey-item {% if survey.survey_id in completed_survey_ids %}completed{% endif %}">
+            <h3>{{ survey.title }}</h3>
+            {% if survey.description %}
+                <p>{{ survey.description }}</p>
+            {% endif %}
+            
+            {% if survey.survey_id in completed_survey_ids %}
+                <div style="color: #28a745; font-weight: bold; margin-bottom: 10px;">
+                    ✓ 已完成
+                </div>
+                <a href="{{ url_for('start_survey', survey_id=survey.survey_id) }}" class="btn">查看问卷</a>
+            {% else %}
+                <a href="{{ url_for('start_survey', survey_id=survey.survey_id) }}" class="btn btn-success">开始填写</a>
+            {% endif %}
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="card">
+        <div class="card-body" style="text-align: center; padding: 50px 20px;">
+            <h3 style="color: #666; margin-bottom: 20px;">暂无活跃问卷</h3>
+            <p style="color: #999;">请等待管理员添加新的问卷</p>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}添加问卷 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>添加问卷</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 
+    <a href="{{ url_for('admin_surveys') }}">问卷管理</a> > 添加问卷
+</div>
+
+<div style="max-width: 600px;">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                <div class="form-group">
+                    <label for="survey_id">问卷ID:</label>
+                    <input type="number" id="survey_id" name="survey_id" required>
+                    <small style="color: #666;">请输入 LimeSurvey 中的问卷ID（数字）</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="title">问卷标题:</label>
+                    <input type="text" id="title" name="title" required>
+                    <small style="color: #666;">显示给用户的问卷标题</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">问卷描述:</label>
+                    <textarea id="description" name="description" rows="3" placeholder="可选，问卷的简短描述"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="is_active" checked> 
+                        立即激活此问卷
+                    </label>
+                    <small style="display: block; color: #666;">只有激活的问卷才会显示给用户</small>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-success">添加问卷</button>
+                    <a href="{{ url_for('admin_surveys') }}" class="btn">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

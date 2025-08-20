@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}系统配置 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>系统配置</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 系统配置
+</div>
+
+<div style="max-width: 700px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>LimeSurvey 连接配置</h3>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                <div class="form-group">
+                    <label for="ls_url">LimeSurvey API URL:</label>
+                    <input type="url" id="ls_url" name="ls_url" value="{{ config.ls_url }}" required>
+                    <small style="color: #666;">格式: http://domain/index.php/admin/remotecontrol</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="ls_admin">LimeSurvey 管理员用户名:</label>
+                    <input type="text" id="ls_admin" name="ls_admin" value="{{ config.ls_admin }}" required>
+                    <small style="color: #666;">LimeSurvey 管理员账号</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="ls_password">LimeSurvey 管理员密码:</label>
+                    <input type="password" id="ls_password" name="ls_password" value="{{ config.ls_password }}" required>
+                    <small style="color: #666;">LimeSurvey 管理员密码</small>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-success">保存配置</button>
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>配置说明</h3>
+        </div>
+        <div class="card-body">
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px;">
+                <h4>重要提示：</h4>
+                <ul>
+                    <li>请确保 LimeSurvey 的 RemoteControl API 已启用</li>
+                    <li>URL 格式应为: http://你的域名/index.php/admin/remotecontrol</li>
+                    <li>用户名和密码是 LimeSurvey 的管理员账号</li>
+                    <li>修改配置后，所有问卷操作将使用新的连接信息</li>
+                    <li>如果连接失败，请检查 LimeSurvey 服务状态和网络连接</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

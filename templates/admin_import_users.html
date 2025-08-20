@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}批量导入用户 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>批量导入用户</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 
+    <a href="{{ url_for('admin_users') }}">用户管理</a> > 批量导入
+</div>
+
+<div style="max-width: 600px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>CSV 文件导入</h3>
+        </div>
+        <div class="card-body">
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                <h4>文件格式说明：</h4>
+                <ul>
+                    <li>请上传 CSV 格式文件</li>
+                    <li>每行包含两列：用户名,密码</li>
+                    <li>不需要表头，直接从第一行开始数据</li>
+                    <li>示例：user1,password1</li>
+                </ul>
+            </div>
+            
+            <form method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="csv_file">选择 CSV 文件:</label>
+                    <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-success">导入用户</button>
+                    <a href="{{ url_for('admin_users') }}" class="btn">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>示例 CSV 内容</h3>
+        </div>
+        <div class="card-body">
+            <pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; font-family: monospace;">user1,password123
+user2,password456
+user3,password789</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}

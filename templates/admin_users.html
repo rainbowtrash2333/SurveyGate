@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>用户管理</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 用户管理
+</div>
+
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin_add_user') }}" class="btn btn-success">添加用户</a>
+    <a href="{{ url_for('admin_import_users') }}" class="btn btn-warning">批量导入</a>
+    <span style="margin-left: 20px; color: #666;">共 {{ users|length }} 个用户</span>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if users %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>用户名</th>
+                        <th>注册时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.id }}</td>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.created_at }}</td>
+                        <td>
+                            <a href="{{ url_for('admin_change_user_password', user_id=user.id) }}" 
+                               class="btn btn-warning" style="font-size: 12px; padding: 5px 10px;">修改密码</a>
+                            <form method="post" action="{{ url_for('admin_delete_user', user_id=user.id) }}" 
+                                  style="display: inline;" 
+                                  onsubmit="return confirm('确定要删除用户 {{ user.username }} 吗？')">
+                                <button type="submit" class="btn btn-danger" style="font-size: 12px; padding: 5px 10px;">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div style="text-align: center; padding: 50px 20px;">
+                <h3 style="color: #666; margin-bottom: 20px;">暂无用户</h3>
+                <p style="color: #999;">点击上方按钮添加第一个用户</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

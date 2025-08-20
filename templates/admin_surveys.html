@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}问卷管理 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>问卷管理</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 问卷管理
+</div>
+
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin_add_survey') }}" class="btn btn-success">添加问卷</a>
+    <span style="margin-left: 20px; color: #666;">共 {{ surveys|length }} 个问卷</span>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if surveys %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>问卷ID</th>
+                        <th>标题</th>
+                        <th>描述</th>
+                        <th>状态</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for survey in surveys %}
+                    <tr>
+                        <td>{{ survey.survey_id }}</td>
+                        <td>{{ survey.title }}</td>
+                        <td>{{ survey.description[:50] }}{% if survey.description|length > 50 %}...{% endif %}</td>
+                        <td>
+                            {% if survey.is_active %}
+                                <span style="color: #28a745; font-weight: bold;">活跃</span>
+                            {% else %}
+                                <span style="color: #6c757d;">已关闭</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ survey.created_at }}</td>
+                        <td>
+                            <a href="{{ url_for('admin_edit_survey', survey_id=survey.survey_id) }}" 
+                               class="btn btn-warning" style="font-size: 12px; padding: 5px 10px;">编辑</a>
+                            <form method="post" action="{{ url_for('admin_delete_survey', survey_id=survey.survey_id) }}" 
+                                  style="display: inline;" 
+                                  onsubmit="return confirm('确定要删除问卷 {{ survey.title }} 吗？这将同时删除所有相关的答题记录。')">
+                                <button type="submit" class="btn btn-danger" style="font-size: 12px; padding: 5px 10px;">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div style="text-align: center; padding: 50px 20px;">
+                <h3 style="color: #666; margin-bottom: 20px;">暂无问卷</h3>
+                <p style="color: #999;">点击上方按钮添加第一个问卷</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

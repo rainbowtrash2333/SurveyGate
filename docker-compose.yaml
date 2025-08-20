@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  db:
+    image: mariadb:10.5
+    container_name: limesurvey_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword       # 数据库 root 密码
+      MYSQL_DATABASE: limesurvey             # 默认数据库名
+      MYSQL_USER: limesurvey                 # LimeSurvey 数据库用户
+      MYSQL_PASSWORD: limesurveypassword     # 用户密码
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - limesurvey_net
+
+  limesurvey:
+    image: adamzammit/limesurvey:6.15.5
+    container_name: limesurvey_app
+    restart: always
+    ports:
+      - "20050:80"  # 外部访问端口
+    environment:
+      LIMESURVEY_DB_TYPE: mysql
+      LIMESURVEY_DB_HOST: db
+      LIMESURVEY_DB_PORT: 3306
+      LIMESURVEY_DB_NAME: limesurvey
+      LIMESURVEY_DB_USER: limesurvey
+      LIMESURVEY_DB_PASSWORD: limesurveypassword
+
+      # 管理员账号
+      LIMESURVEY_ADMIN_USER: admin
+      LIMESURVEY_ADMIN_PASSWORD: admin123
+      LIMESURVEY_ADMIN_EMAIL: admin@example.com
+
+      # 开启 RemoteControl API
+      LIMESURVEY_REMOTE_CONTROL: "true"     # 必须为 "true" 字符串
+      LIMESURVEY_ALLOW_EXTERNAL_API: "true" # 可选，允许外部访问 API
+    depends_on:
+      - db
+    networks:
+      - limesurvey_net
+    volumes:
+      - limesurvey_data:/var/www/html/upload
+
+volumes:
+  db_data:
+  limesurvey_data:
+
+networks:
+  limesurvey_net:
+    driver: bridge

@@ -34,18 +34,33 @@ def init_db():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
-    # 用户表
+    # 用户组表 - 支持多层级
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            parent_id INTEGER,
+            full_path TEXT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_id) REFERENCES user_groups (id)
+        )
+    ''')
+    
+    # 用户表 - 添加组ID
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            group_id INTEGER,
             is_admin BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES user_groups (id)
         )
     ''')
     
-    # 问卷表
+    # 问卷表 - 添加组权限控制
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS surveys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +68,20 @@ def init_db():
             title TEXT NOT NULL,
             description TEXT,
             is_active BOOLEAN DEFAULT TRUE,
+            access_type TEXT DEFAULT 'all',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # 问卷组权限表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS survey_group_access (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            survey_id INTEGER,
+            group_id INTEGER,
+            FOREIGN KEY (survey_id) REFERENCES surveys (survey_id),
+            FOREIGN KEY (group_id) REFERENCES user_groups (id),
+            UNIQUE (survey_id, group_id)
         )
     ''')
     
@@ -79,11 +107,15 @@ def init_db():
         )
     ''')
     
+    # 创建默认用户组
+    cursor.execute('INSERT OR IGNORE INTO user_groups (name, parent_id, full_path, description) VALUES (?, ?, ?, ?)', 
+                   ('根组织', None, '根组织', '系统默认根组织'))
+    
     # 插入默认管理员账号
     admin_password_hash = hashlib.sha256(DEFAULT_ADMIN['password'].encode()).hexdigest()
     cursor.execute('''
-        INSERT OR IGNORE INTO users (username, password_hash, is_admin)
-        VALUES (?, ?, ?)
+        INSERT OR IGNORE INTO users (username, password_hash, is_admin, group_id)
+        VALUES (?, ?, ?, 1)
     ''', (DEFAULT_ADMIN['username'], admin_password_hash, True))
     
     # 插入默认配置
@@ -111,6 +143,157 @@ def get_config():
         config[row['key']] = row['value']
     conn.close()
     return config
+
+# 用户组相关函数
+def get_all_groups():
+    conn = get_db_connection()
+    groups = conn.execute('''
+        SELECT id, name, parent_id, full_path, description 
+        FROM user_groups 
+        ORDER BY full_path
+    ''').fetchall()
+    conn.close()
+    return groups
+
+def get_group_hierarchy():
+    """获取用户组层级结构"""
+    conn = get_db_connection()
+    groups = conn.execute('''
+        SELECT id, name, parent_id, full_path, description 
+        FROM user_groups 
+        ORDER BY full_path
+    ''').fetchall()
+    conn.close()
+    
+    # 构建层级结构
+    hierarchy = []
+    for group in groups:
+        level = group['full_path'].count('/') if '/' in group['full_path'] else 0
+        hierarchy.append({
+            'id': group['id'],
+            'name': group['name'],
+            'parent_id': group['parent_id'],
+            'full_path': group['full_path'],
+            'description': group['description'],
+            'level': level,
+            'indent': '　' * level  # 用全角空格缩进
+        })
+    return hierarchy
+
+def create_group(name, parent_id, description=''):
+    """创建用户组"""
+    conn = get_db_connection()
+    
+    # 获取父组路径
+    if parent_id:
+        parent = conn.execute('SELECT full_path FROM user_groups WHERE id = ?', (parent_id,)).fetchone()
+        if parent:
+            full_path = f"{parent['full_path']}/{name}"
+        else:
+            full_path = name
+    else:
+        full_path = name
+    
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO user_groups (name, parent_id, full_path, description)
+        VALUES (?, ?, ?, ?)
+    ''', (name, parent_id, full_path, description))
+    
+    group_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return group_id
+
+def update_group_paths():
+    """更新所有组的完整路径"""
+    conn = get_db_connection()
+    
+    # 递归函数更新路径
+    def update_path(group_id, parent_path=''):
+        group = conn.execute('SELECT id, name, parent_id FROM user_groups WHERE id = ?', (group_id,)).fetchone()
+        if not group:
+            return
+        
+        if parent_path:
+            full_path = f"{parent_path}/{group['name']}"
+        else:
+            full_path = group['name']
+        
+        conn.execute('UPDATE user_groups SET full_path = ? WHERE id = ?', (full_path, group_id))
+        
+        # 更新所有子组
+        children = conn.execute('SELECT id FROM user_groups WHERE parent_id = ?', (group_id,)).fetchall()
+        for child in children:
+            update_path(child['id'], full_path)
+    
+    # 从根组开始更新
+    root_groups = conn.execute('SELECT id FROM user_groups WHERE parent_id IS NULL').fetchall()
+    for root in root_groups:
+        update_path(root['id'])
+    
+    conn.commit()
+    conn.close()
+
+def get_user_accessible_surveys(user_id):
+    """获取用户可访问的问卷"""
+    conn = get_db_connection()
+    
+    # 获取用户组ID
+    user = conn.execute('SELECT group_id FROM users WHERE id = ?', (user_id,)).fetchone()
+    if not user or not user['group_id']:
+        # 没有组的用户只能看到全局问卷
+        surveys = conn.execute('''
+            SELECT survey_id, title, description 
+            FROM surveys 
+            WHERE is_active = 1 AND access_type = 'all'
+        ''').fetchall()
+    else:
+        # 获取用户组及所有父组
+        user_groups = get_user_group_hierarchy(user['group_id'])
+        group_ids = [g['id'] for g in user_groups]
+        
+        if group_ids:
+            placeholders = ','.join('?' * len(group_ids))
+            surveys = conn.execute(f'''
+                SELECT DISTINCT s.survey_id, s.title, s.description 
+                FROM surveys s
+                LEFT JOIN survey_group_access sga ON s.survey_id = sga.survey_id
+                WHERE s.is_active = 1 AND (
+                    s.access_type = 'all' OR 
+                    (s.access_type = 'groups' AND sga.group_id IN ({placeholders}))
+                )
+            ''', group_ids).fetchall()
+        else:
+            surveys = conn.execute('''
+                SELECT survey_id, title, description 
+                FROM surveys 
+                WHERE is_active = 1 AND access_type = 'all'
+            ''').fetchall()
+    
+    conn.close()
+    return surveys
+
+def get_user_group_hierarchy(group_id):
+    """获取用户所在组及所有父组"""
+    conn = get_db_connection()
+    groups = []
+    
+    current_id = group_id
+    while current_id:
+        group = conn.execute('''
+            SELECT id, name, parent_id, full_path 
+            FROM user_groups WHERE id = ?
+        ''', (current_id,)).fetchone()
+        
+        if not group:
+            break
+            
+        groups.append(group)
+        current_id = group['parent_id']
+    
+    conn.close()
+    return groups
 
 def require_login(f):
     @wraps(f)
@@ -193,14 +376,11 @@ def logout():
 @app.route("/dashboard")
 @require_login
 def dashboard():
-    conn = get_db_connection()
-    
-    # 获取活跃的问卷
-    surveys = conn.execute(
-        'SELECT survey_id, title, description FROM surveys WHERE is_active = 1'
-    ).fetchall()
+    # 使用新的组权限逻辑获取问卷
+    surveys = get_user_accessible_surveys(session['user_id'])
     
     # 获取用户已完成的问卷
+    conn = get_db_connection()
     completed_surveys = conn.execute(
         '''SELECT survey_id FROM user_survey_attempts 
            WHERE user_id = ?''',
@@ -208,11 +388,20 @@ def dashboard():
     ).fetchall()
     completed_survey_ids = [s['survey_id'] for s in completed_surveys]
     
+    # 获取用户组信息
+    user_group = conn.execute('''
+        SELECT ug.full_path 
+        FROM users u 
+        LEFT JOIN user_groups ug ON u.group_id = ug.id 
+        WHERE u.id = ?
+    ''', (session['user_id'],)).fetchone()
+    
     conn.close()
     
     return render_template("dashboard.html", 
                          surveys=surveys, 
-                         completed_survey_ids=completed_survey_ids)
+                         completed_survey_ids=completed_survey_ids,
+                         user_group=user_group['full_path'] if user_group and user_group['full_path'] else '未分组')
 
 # 开始问卷
 @app.route("/start_survey/<int:survey_id>")
@@ -275,7 +464,7 @@ def start_survey(survey_id):
         )
         conn.commit()
         
-        survey_url = f"http://127.0.0.1:20050/index.php/{survey_id}?token={token}"
+        survey_url = f"{LIMESURVEY_BASE}/index.php/{survey_id}?token={token}"
         rpc_request("release_session_key", [session_key], config)
         
         conn.close()
@@ -329,24 +518,151 @@ def change_password():
 def admin_dashboard():
     conn = get_db_connection()
     
-    # 获取用户统计
+    # 获取统计数据
     user_count = conn.execute('SELECT COUNT(*) as count FROM users WHERE is_admin = 0').fetchone()['count']
     survey_count = conn.execute('SELECT COUNT(*) as count FROM surveys').fetchone()['count']
     attempt_count = conn.execute('SELECT COUNT(*) as count FROM user_survey_attempts').fetchone()['count']
+    group_count = conn.execute('SELECT COUNT(*) as count FROM user_groups').fetchone()['count']
     
     conn.close()
     
     return render_template("admin_dashboard.html", 
                          user_count=user_count,
                          survey_count=survey_count,
-                         attempt_count=attempt_count)
+                         attempt_count=attempt_count,
+                         group_count=group_count)
+
+# 用户组管理
+@app.route("/admin/groups")
+@require_admin
+def admin_groups():
+    groups = get_group_hierarchy()
+    return render_template("admin_groups.html", groups=groups)
+
+# 添加用户组
+@app.route("/admin/groups/add", methods=["GET", "POST"])
+@require_admin
+def admin_add_group():
+    if request.method == "POST":
+        name = request.form.get("name")
+        parent_id = request.form.get("parent_id")
+        description = request.form.get("description", "")
+        
+        if not name:
+            flash("组名不能为空", "error")
+            return render_template("admin_add_group.html", all_groups=get_all_groups())
+        
+        try:
+            parent_id = int(parent_id) if parent_id and parent_id != '' else None
+            create_group(name, parent_id, description)
+            flash("用户组添加成功", "success")
+            return redirect(url_for('admin_groups'))
+        except Exception as e:
+            flash(f"添加用户组失败: {e}", "error")
+    
+    all_groups = get_all_groups()
+    return render_template("admin_add_group.html", all_groups=all_groups)
+
+# 编辑用户组
+@app.route("/admin/groups/edit/<int:group_id>", methods=["GET", "POST"])
+@require_admin
+def admin_edit_group(group_id):
+    conn = get_db_connection()
+    group = conn.execute('SELECT * FROM user_groups WHERE id = ?', (group_id,)).fetchone()
+    
+    if not group:
+        flash("用户组不存在", "error")
+        conn.close()
+        return redirect(url_for('admin_groups'))
+    
+    if request.method == "POST":
+        name = request.form.get("name")
+        parent_id = request.form.get("parent_id")
+        description = request.form.get("description", "")
+        
+        if not name:
+            flash("组名不能为空", "error")
+            conn.close()
+            return render_template("admin_edit_group.html", group=group, all_groups=get_all_groups())
+        
+        try:
+            parent_id = int(parent_id) if parent_id and parent_id != '' else None
+            
+            # 不能设置自己或子组为父组
+            if parent_id == group_id:
+                flash("不能设置自己为父组", "error")
+                conn.close()
+                return render_template("admin_edit_group.html", group=group, all_groups=get_all_groups())
+            
+            conn.execute('''
+                UPDATE user_groups 
+                SET name = ?, parent_id = ?, description = ? 
+                WHERE id = ?
+            ''', (name, parent_id, description, group_id))
+            conn.commit()
+            
+            # 更新所有组的路径
+            update_group_paths()
+            
+            flash("用户组更新成功", "success")
+            conn.close()
+            return redirect(url_for('admin_groups'))
+        except Exception as e:
+            flash(f"更新用户组失败: {e}", "error")
+    
+    all_groups = get_all_groups()
+    conn.close()
+    return render_template("admin_edit_group.html", group=group, all_groups=all_groups)
+
+# 删除用户组
+@app.route("/admin/groups/delete/<int:group_id>", methods=["POST"])
+@require_admin
+def admin_delete_group(group_id):
+    if group_id == 1:  # 保护根组织
+        flash("不能删除根组织", "error")
+        return redirect(url_for('admin_groups'))
+    
+    conn = get_db_connection()
+    
+    # 检查是否有子组
+    children = conn.execute('SELECT COUNT(*) as count FROM user_groups WHERE parent_id = ?', (group_id,)).fetchone()
+    if children['count'] > 0:
+        flash("请先删除所有子组", "error")
+        conn.close()
+        return redirect(url_for('admin_groups'))
+    
+    # 检查是否有用户
+    users = conn.execute('SELECT COUNT(*) as count FROM users WHERE group_id = ?', (group_id,)).fetchone()
+    if users['count'] > 0:
+        flash("请先将组内用户转移到其他组", "error")
+        conn.close()
+        return redirect(url_for('admin_groups'))
+    
+    try:
+        # 删除组的问卷权限
+        conn.execute('DELETE FROM survey_group_access WHERE group_id = ?', (group_id,))
+        # 删除组
+        conn.execute('DELETE FROM user_groups WHERE id = ?', (group_id,))
+        conn.commit()
+        flash("用户组删除成功", "success")
+    except Exception as e:
+        flash(f"删除用户组失败: {e}", "error")
+    
+    conn.close()
+    return redirect(url_for('admin_groups'))
 
 # 用户管理
 @app.route("/admin/users")
 @require_admin
 def admin_users():
     conn = get_db_connection()
-    users = conn.execute('SELECT id, username, created_at FROM users WHERE is_admin = 0 ORDER BY created_at DESC').fetchall()
+    users = conn.execute('''
+        SELECT u.id, u.username, u.created_at, ug.full_path as group_path
+        FROM users u 
+        LEFT JOIN user_groups ug ON u.group_id = ug.id 
+        WHERE u.is_admin = 0 
+        ORDER BY u.created_at DESC
+    ''').fetchall()
     conn.close()
     return render_template("admin_users.html", users=users)
 
@@ -357,10 +673,11 @@ def admin_add_user():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
+        group_id = request.form.get("group_id")
         
         if not username or not password:
             flash("用户名和密码不能为空", "error")
-            return render_template("admin_add_user.html")
+            return render_template("admin_add_user.html", all_groups=get_all_groups())
         
         conn = get_db_connection()
         
@@ -369,13 +686,14 @@ def admin_add_user():
         if existing:
             flash("用户名已存在", "error")
             conn.close()
-            return render_template("admin_add_user.html")
+            return render_template("admin_add_user.html", all_groups=get_all_groups())
         
         try:
             password_hash = hash_password(password)
+            group_id = int(group_id) if group_id and group_id != '' else None
             conn.execute(
-                'INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)',
-                (username, password_hash, False)
+                'INSERT INTO users (username, password_hash, is_admin, group_id) VALUES (?, ?, ?, ?)',
+                (username, password_hash, False, group_id)
             )
             conn.commit()
             flash("用户添加成功", "success")
@@ -384,9 +702,10 @@ def admin_add_user():
         except Exception as e:
             flash(f"添加用户失败: {e}", "error")
             conn.close()
-            return render_template("admin_add_user.html")
+            return render_template("admin_add_user.html", all_groups=get_all_groups())
     
-    return render_template("admin_add_user.html")
+    all_groups = get_all_groups()
+    return render_template("admin_add_user.html", all_groups=all_groups)
 
 # 修改用户密码
 @app.route("/admin/users/change_password/<int:user_id>", methods=["GET", "POST"])
@@ -458,16 +777,18 @@ def admin_import_users():
     if request.method == "POST":
         if 'csv_file' not in request.files:
             flash("请选择CSV文件", "error")
-            return render_template("admin_import_users.html")
+            return render_template("admin_import_users.html", all_groups=get_all_groups())
         
         file = request.files['csv_file']
+        default_group_id = request.form.get("default_group_id")
+        
         if file.filename == '':
             flash("请选择CSV文件", "error")
-            return render_template("admin_import_users.html")
+            return render_template("admin_import_users.html", all_groups=get_all_groups())
         
         if not file.filename.endswith('.csv'):
             flash("请上传CSV格式文件", "error")
-            return render_template("admin_import_users.html")
+            return render_template("admin_import_users.html", all_groups=get_all_groups())
         
         try:
             # 读取CSV内容
@@ -478,21 +799,75 @@ def admin_import_users():
             success_count = 0
             error_count = 0
             
+            # 获取组映射（组全路径 -> 组ID）
+            groups_map = {}
+            all_groups = conn.execute('SELECT id, full_path FROM user_groups').fetchall()
+            for group in all_groups:
+                groups_map[group['full_path']] = group['id']
+            
+            default_group_id = int(default_group_id) if default_group_id and default_group_id != '' else None
+            
+            def get_or_create_group_by_path(group_path):
+                """根据路径获取或创建组织"""
+                if not group_path or group_path in groups_map:
+                    return groups_map.get(group_path)
+                
+                # 分解路径，逐级创建组织
+                path_parts = group_path.split('/')
+                current_path = ''
+                parent_id = None
+                
+                for part in path_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    
+                    if current_path:
+                        current_path += '/' + part
+                    else:
+                        current_path = part
+                    
+                    if current_path not in groups_map:
+                        # 创建新组织
+                        cursor.execute('''
+                            INSERT INTO user_groups (name, parent_id, full_path, description)
+                            VALUES (?, ?, ?, ?)
+                        ''', (part, parent_id, current_path, f'通过CSV导入自动创建'))
+                        
+                        new_group_id = cursor.lastrowid
+                        groups_map[current_path] = new_group_id
+                        parent_id = new_group_id
+                    else:
+                        parent_id = groups_map[current_path]
+                
+                return groups_map.get(group_path)
+            
+            cursor = conn.cursor()
+            
             for row in csv_input:
                 if len(row) >= 2:
-                    username, password = row[0].strip(), row[1].strip()
+                    username = row[0].strip()
+                    password = row[1].strip()
+                    group_path = row[2].strip() if len(row) > 2 else None
+                    
                     if username and password:
                         # 检查用户是否已存在
                         existing = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
                         if not existing:
                             try:
+                                # 确定用户组ID
+                                user_group_id = default_group_id
+                                if group_path:
+                                    user_group_id = get_or_create_group_by_path(group_path)
+                                
                                 password_hash = hash_password(password)
                                 conn.execute(
-                                    'INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)',
-                                    (username, password_hash, False)
+                                    'INSERT INTO users (username, password_hash, is_admin, group_id) VALUES (?, ?, ?, ?)',
+                                    (username, password_hash, False, user_group_id)
                                 )
                                 success_count += 1
-                            except:
+                            except Exception as ex:
+                                print(f"创建用户失败: {username}, 错误: {ex}")  # 调试用
                                 error_count += 1
                         else:
                             error_count += 1
@@ -504,21 +879,35 @@ def admin_import_users():
             conn.commit()
             conn.close()
             
-            flash(f"导入完成: 成功 {success_count} 个，失败 {error_count} 个", "success")
+            # 显示更详细的导入结果
+            if success_count > 0:
+                flash(f"导入完成！成功创建 {success_count} 个用户，失败 {error_count} 个", "success")
+            else:
+                flash(f"导入完成！成功 {success_count} 个，失败 {error_count} 个。请检查CSV格式是否正确", "warning")
+            
             return redirect(url_for('admin_users'))
             
         except Exception as e:
             flash(f"导入失败: {e}", "error")
-            return render_template("admin_import_users.html")
+            return render_template("admin_import_users.html", all_groups=get_all_groups())
     
-    return render_template("admin_import_users.html")
+    all_groups = get_all_groups()
+    return render_template("admin_import_users.html", all_groups=all_groups)
 
 # 问卷管理
 @app.route("/admin/surveys")
 @require_admin
 def admin_surveys():
     conn = get_db_connection()
-    surveys = conn.execute('SELECT * FROM surveys ORDER BY created_at DESC').fetchall()
+    surveys = conn.execute('''
+        SELECT s.*, 
+               GROUP_CONCAT(ug.full_path) as allowed_groups
+        FROM surveys s
+        LEFT JOIN survey_group_access sga ON s.survey_id = sga.survey_id
+        LEFT JOIN user_groups ug ON sga.group_id = ug.id
+        GROUP BY s.id
+        ORDER BY s.created_at DESC
+    ''').fetchall()
     conn.close()
     return render_template("admin_surveys.html", surveys=surveys)
 
@@ -531,16 +920,18 @@ def admin_add_survey():
         title = request.form.get("title")
         description = request.form.get("description", "")
         is_active = request.form.get("is_active") == "on"
+        access_type = request.form.get("access_type", "all")
+        selected_groups = request.form.getlist("selected_groups")
         
         if not survey_id or not title:
             flash("问卷ID和标题不能为空", "error")
-            return render_template("admin_add_survey.html")
+            return render_template("admin_add_survey.html", all_groups=get_all_groups())
         
         try:
             survey_id = int(survey_id)
         except ValueError:
             flash("问卷ID必须是数字", "error")
-            return render_template("admin_add_survey.html")
+            return render_template("admin_add_survey.html", all_groups=get_all_groups())
         
         conn = get_db_connection()
         
@@ -549,13 +940,24 @@ def admin_add_survey():
         if existing:
             flash("问卷ID已存在", "error")
             conn.close()
-            return render_template("admin_add_survey.html")
+            return render_template("admin_add_survey.html", all_groups=get_all_groups())
         
         try:
+            # 添加问卷
             conn.execute(
-                'INSERT INTO surveys (survey_id, title, description, is_active) VALUES (?, ?, ?, ?)',
-                (survey_id, title, description, is_active)
+                'INSERT INTO surveys (survey_id, title, description, is_active, access_type) VALUES (?, ?, ?, ?, ?)',
+                (survey_id, title, description, is_active, access_type)
             )
+            
+            # 如果是组权限，添加组权限记录
+            if access_type == 'groups' and selected_groups:
+                for group_id in selected_groups:
+                    if group_id:
+                        conn.execute(
+                            'INSERT INTO survey_group_access (survey_id, group_id) VALUES (?, ?)',
+                            (survey_id, int(group_id))
+                        )
+            
             conn.commit()
             flash("问卷添加成功", "success")
             conn.close()
@@ -563,9 +965,10 @@ def admin_add_survey():
         except Exception as e:
             flash(f"添加问卷失败: {e}", "error")
             conn.close()
-            return render_template("admin_add_survey.html")
+            return render_template("admin_add_survey.html", all_groups=get_all_groups())
     
-    return render_template("admin_add_survey.html")
+    all_groups = get_all_groups()
+    return render_template("admin_add_survey.html", all_groups=all_groups)
 
 # 编辑问卷
 @app.route("/admin/surveys/edit/<int:survey_id>", methods=["GET", "POST"])
@@ -579,32 +982,59 @@ def admin_edit_survey(survey_id):
         conn.close()
         return redirect(url_for('admin_surveys'))
     
+    # 获取当前问卷的组权限
+    current_groups = conn.execute('''
+        SELECT group_id FROM survey_group_access WHERE survey_id = ?
+    ''', (survey_id,)).fetchall()
+    current_group_ids = [str(g['group_id']) for g in current_groups]
+    
     if request.method == "POST":
         title = request.form.get("title")
         description = request.form.get("description", "")
         is_active = request.form.get("is_active") == "on"
+        access_type = request.form.get("access_type", "all")
+        selected_groups = request.form.getlist("selected_groups")
         
         if not title:
             flash("标题不能为空", "error")
             conn.close()
-            return render_template("admin_edit_survey.html", survey=survey)
+            return render_template("admin_edit_survey.html", 
+                                 survey=survey, 
+                                 all_groups=get_all_groups(),
+                                 current_group_ids=current_group_ids)
         
         try:
+            # 更新问卷信息
             conn.execute(
-                'UPDATE surveys SET title = ?, description = ?, is_active = ? WHERE survey_id = ?',
-                (title, description, is_active, survey_id)
+                'UPDATE surveys SET title = ?, description = ?, is_active = ?, access_type = ? WHERE survey_id = ?',
+                (title, description, is_active, access_type, survey_id)
             )
+            
+            # 删除旧的组权限
+            conn.execute('DELETE FROM survey_group_access WHERE survey_id = ?', (survey_id,))
+            
+            # 如果是组权限，添加新的组权限记录
+            if access_type == 'groups' and selected_groups:
+                for group_id in selected_groups:
+                    if group_id:
+                        conn.execute(
+                            'INSERT INTO survey_group_access (survey_id, group_id) VALUES (?, ?)',
+                            (survey_id, int(group_id))
+                        )
+            
             conn.commit()
             flash("问卷更新成功", "success")
             conn.close()
             return redirect(url_for('admin_surveys'))
         except Exception as e:
             flash(f"更新问卷失败: {e}", "error")
-            conn.close()
-            return render_template("admin_edit_survey.html", survey=survey)
     
+    all_groups = get_all_groups()
     conn.close()
-    return render_template("admin_edit_survey.html", survey=survey)
+    return render_template("admin_edit_survey.html", 
+                         survey=survey, 
+                         all_groups=all_groups,
+                         current_group_ids=current_group_ids)
 
 # 删除问卷
 @app.route("/admin/surveys/delete/<int:survey_id>", methods=["POST"])

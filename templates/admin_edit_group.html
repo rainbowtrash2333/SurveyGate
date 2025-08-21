@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}编辑组织 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>编辑组织</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 
+    <a href="{{ url_for('admin_groups') }}">组织管理</a> > 编辑组织
+</div>
+
+<div style="max-width: 600px;">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                <div class="form-group">
+                    <label>当前组织路径:</label>
+                    <input type="text" value="{{ group.full_path }}" disabled style="background-color: #e9ecef;">
+                    <small style="color: #666;">显示当前组织的完整路径</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">组织名称:</label>
+                    <input type="text" id="name" name="name" value="{{ group.name }}" required>
+                    <small style="color: #666;">例如：财务处、采购科等</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="parent_id">上级组织:</label>
+                    <select id="parent_id" name="parent_id">
+                        <option value="">根组织</option>
+                        {% for parent_group in all_groups %}
+                            {% if parent_group.id != group.id %}
+                                <option value="{{ parent_group.id }}" 
+                                    {% if parent_group.id == group.parent_id %}selected{% endif %}>
+                                    {{ parent_group.full_path }}
+                                </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <small style="color: #666;">不能设置自己为上级组织</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">组织描述:</label>
+                    <textarea id="description" name="description" rows="3">{{ group.description or '' }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-success">保存修改</button>
+                    <a href="{{ url_for('admin_groups') }}" class="btn">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="alert alert-warning">
+        <strong>注意：</strong>修改上级组织将会更新所有子组织的路径。
+    </div>
+</div>
+{% endblock %}

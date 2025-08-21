@@ -7,11 +7,12 @@
 
 <div class="breadcrumb">
     <span>首页 > 我的问卷</span>
+    <span style="float: right; color: #666;">所属组织: {{ user_group }}</span>
 </div>
 
 {% if surveys %}
     <div style="margin-bottom: 20px;">
-        <p>当前有 <strong>{{ surveys|length }}</strong> 个活跃问卷可以填写</p>
+        <p>当前有 <strong>{{ surveys|length }}</strong> 个可填写的问卷</p>
     </div>
 
     {% for survey in surveys %}
@@ -34,8 +35,8 @@
 {% else %}
     <div class="card">
         <div class="card-body" style="text-align: center; padding: 50px 20px;">
-            <h3 style="color: #666; margin-bottom: 20px;">暂无活跃问卷</h3>
-            <p style="color: #999;">请等待管理员添加新的问卷</p>
+            <h3 style="color: #666; margin-bottom: 20px;">暂无可填写问卷</h3>
+            <p style="color: #999;">请联系管理员为您的组织分配问卷，或等待添加全局问卷</p>
         </div>
     </div>
 {% endif %}

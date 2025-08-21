@@ -23,6 +23,7 @@
                     <tr>
                         <th>ID</th>
                         <th>用户名</th>
+                        <th>所属组织</th>
                         <th>注册时间</th>
                         <th>操作</th>
                     </tr>
@@ -32,6 +33,7 @@
                     <tr>
                         <td>{{ user.id }}</td>
                         <td>{{ user.username }}</td>
+                        <td>{{ user.group_path or '未分组' }}</td>
                         <td>{{ user.created_at }}</td>
                         <td>
                             <a href="{{ url_for('admin_change_user_password', user_id=user.id) }}" 

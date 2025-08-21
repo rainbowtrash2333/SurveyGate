@@ -10,7 +10,7 @@
     <a href="{{ url_for('admin_surveys') }}">问卷管理</a> > 编辑问卷
 </div>
 
-<div style="max-width: 600px;">
+<div style="max-width: 700px;">
     <div class="card">
         <div class="card-body">
             <form method="post">
@@ -32,6 +32,60 @@
                 </div>
                 
                 <div class="form-group">
+                    <label>访问权限:</label>
+                    <div>
+                        <label style="display: block; margin-bottom: 10px;">
+                            <input type="radio" name="access_type" value="all" 
+                                   {% if survey.access_type == 'all' %}checked{% endif %}
+                                   onchange="toggleGroupSelection()"> 
+                            全员可见 - 所有用户都可以访问此问卷
+                        </label>
+                        <label style="display: block;">
+                            <input type="radio" name="access_type" value="groups" 
+                                   {% if survey.access_type == 'groups' %}checked{% endif %}
+                                   onchange="toggleGroupSelection()"> 
+                            组织限制 - 仅指定组织的用户可以访问
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="group-selection" 
+                     style="{% if survey.access_type != 'groups' %}display: none;{% endif %}">
+                    <label>选择可访问的组织:</label>
+                    <div class="tree-selector" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 4px; background-color: #fafafa;">
+                        {% for group in all_groups %}
+                            <div class="tree-node" data-level="{{ group.full_path.count('/') if '/' in group.full_path else 0 }}" style="margin-left: {{ (group.full_path.count('/') if '/' in group.full_path else 0) * 20 }}px; margin-bottom: 8px;">
+                                <div class="tree-item" style="display: flex; align-items: center; padding: 5px; border-radius: 3px; transition: background-color 0.2s;">
+                                    {% if group.full_path.count('/') > 0 %}
+                                        <span class="tree-connector" style="margin-right: 8px; color: #999;">└─</span>
+                                    {% endif %}
+                                    <label style="display: flex; align-items: center; margin: 0; cursor: pointer; flex: 1;">
+                                        <input type="checkbox" name="selected_groups" value="{{ group.id }}"
+                                               {% if group.id|string in current_group_ids %}checked{% endif %}
+                                               style="margin-right: 8px;">
+                                        <span class="group-icon" style="margin-right: 6px; color: #007bff;">
+                                            {% if group.full_path.count('/') == 0 %}🏢{% else %}📁{% endif %}
+                                        </span>
+                                        <span class="group-name" style="font-weight: {% if group.full_path.count('/') == 0 %}bold{% else %}normal{% endif %};">
+                                            {{ group.name }}
+                                        </span>
+                                        {% if group.description %}
+                                            <small style="margin-left: 8px; color: #666;">({{ group.description }})</small>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button type="button" class="btn" style="font-size: 12px; padding: 5px 10px;" onclick="selectAllGroups()">全选</button>
+                        <button type="button" class="btn" style="font-size: 12px; padding: 5px 10px;" onclick="clearAllGroups()">清空</button>
+                        <button type="button" class="btn btn-warning" style="font-size: 12px; padding: 5px 10px;" onclick="selectRootGroups()">仅选根组织</button>
+                    </div>
+                    <small style="color: #666;">选择可以访问此问卷的组织，子组织用户可以访问父组织的问卷</small>
+                </div>
+                
+                <div class="form-group">
                     <label>
                         <input type="checkbox" name="is_active" {% if survey.is_active %}checked{% endif %}> 
                         激活此问卷
@@ -47,4 +101,87 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleGroupSelection() {
+    var accessType = document.querySelector('input[name="access_type"]:checked').value;
+    var groupSelection = document.getElementById('group-selection');
+    
+    if (accessType === 'groups') {
+        groupSelection.style.display = 'block';
+    } else {
+        groupSelection.style.display = 'none';
+        // 取消所有组织的选择
+        var checkboxes = document.querySelectorAll('input[name="selected_groups"]');
+        checkboxes.forEach(function(checkbox) {
+            checkbox.checked = false;
+        });
+    }
+}
+
+function selectAllGroups() {
+    var checkboxes = document.querySelectorAll('input[name="selected_groups"]');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = true;
+    });
+}
+
+function clearAllGroups() {
+    var checkboxes = document.querySelectorAll('input[name="selected_groups"]');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = false;
+    });
+}
+
+function selectRootGroups() {
+    var checkboxes = document.querySelectorAll('input[name="selected_groups"]');
+    checkboxes.forEach(function(checkbox) {
+        var treeNode = checkbox.closest('.tree-node');
+        var level = parseInt(treeNode.getAttribute('data-level'));
+        checkbox.checked = (level === 0);
+    });
+}
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', function() {
+    toggleGroupSelection();
+    
+    // 添加悬停效果
+    var treeItems = document.querySelectorAll('.tree-item');
+    treeItems.forEach(function(item) {
+        item.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#e3f2fd';
+        });
+        item.addEventListener('mouseleave', function() {
+            var checkbox = this.querySelector('input[type="checkbox"]');
+            if (checkbox.checked) {
+                this.style.backgroundColor = '#e8f5e8';
+            } else {
+                this.style.backgroundColor = 'transparent';
+            }
+        });
+    });
+    
+    // 为选中的项目添加特殊样式
+    var checkboxes = document.querySelectorAll('input[name="selected_groups"]');
+    checkboxes.forEach(function(checkbox) {
+        // 初始化已选中项目的样式
+        var treeItem = checkbox.closest('.tree-item');
+        if (checkbox.checked) {
+            treeItem.style.backgroundColor = '#e8f5e8';
+            treeItem.style.border = '1px solid #4caf50';
+        }
+        
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                treeItem.style.backgroundColor = '#e8f5e8';
+                treeItem.style.border = '1px solid #4caf50';
+            } else {
+                treeItem.style.backgroundColor = 'transparent';
+                treeItem.style.border = 'none';
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

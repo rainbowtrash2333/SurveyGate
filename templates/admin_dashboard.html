@@ -15,6 +15,11 @@
         <p>注册用户</p>
     </div>
     
+    <div class="stat-card" style="background: linear-gradient(135deg, #9b59b6, #8e44ad);">
+        <h3>{{ group_count }}</h3>
+        <p>用户组织</p>
+    </div>
+    
     <div class="stat-card" style="background: linear-gradient(135deg, #27ae60, #219a52);">
         <h3>{{ survey_count }}</h3>
         <p>问卷数量</p>
@@ -32,7 +37,7 @@
             <h3>用户管理</h3>
         </div>
         <div class="card-body">
-            <p>管理系统用户，添加、删除用户账号</p>
+            <p>管理系统用户，添加、删除用户账号，分配用户组</p>
             <div style="margin-top: 15px;">
                 <a href="{{ url_for('admin_users') }}" class="btn">查看所有用户</a>
                 <a href="{{ url_for('admin_add_user') }}" class="btn btn-success">添加用户</a>
@@ -43,10 +48,23 @@
     
     <div class="card">
         <div class="card-header">
+            <h3>组织管理</h3>
+        </div>
+        <div class="card-body">
+            <p>管理多层级用户组织，支持部门/科室等层级结构</p>
+            <div style="margin-top: 15px;">
+                <a href="{{ url_for('admin_groups') }}" class="btn">查看组织架构</a>
+                <a href="{{ url_for('admin_add_group') }}" class="btn btn-success">添加组织</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
             <h3>问卷管理</h3>
         </div>
         <div class="card-body">
-            <p>管理系统问卷，设置活跃状态和问卷信息</p>
+            <p>管理问卷发放，设置组织访问权限和问卷状态</p>
             <div style="margin-top: 15px;">
                 <a href="{{ url_for('admin_surveys') }}" class="btn">查看所有问卷</a>
                 <a href="{{ url_for('admin_add_survey') }}" class="btn btn-success">添加问卷</a>

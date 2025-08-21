@@ -311,6 +311,7 @@
                 {% if session.is_admin %}
                     <a href="{{ url_for('admin_dashboard') }}">管理首页</a>
                     <a href="{{ url_for('admin_users') }}">用户管理</a>
+                    <a href="{{ url_for('admin_groups') }}">组织管理</a>
                     <a href="{{ url_for('admin_surveys') }}">问卷管理</a>
                     <a href="{{ url_for('admin_config') }}">系统配置</a>
                 {% else %}

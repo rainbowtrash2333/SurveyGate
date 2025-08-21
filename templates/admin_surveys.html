@@ -22,7 +22,7 @@
                     <tr>
                         <th>问卷ID</th>
                         <th>标题</th>
-                        <th>描述</th>
+                        <th>访问权限</th>
                         <th>状态</th>
                         <th>创建时间</th>
                         <th>操作</th>
@@ -33,7 +33,16 @@
                     <tr>
                         <td>{{ survey.survey_id }}</td>
                         <td>{{ survey.title }}</td>
-                        <td>{{ survey.description[:50] }}{% if survey.description|length > 50 %}...{% endif %}</td>
+                        <td>
+                            {% if survey.access_type == 'all' %}
+                                <span style="color: #28a745;">全员可见</span>
+                            {% else %}
+                                <span style="color: #007bff;">组织限制</span>
+                                {% if survey.allowed_groups %}
+                                    <br><small style="color: #666;">{{ survey.allowed_groups }}</small>
+                                {% endif %}
+                            {% endif %}
+                        </td>
                         <td>
                             {% if survey.is_active %}
                                 <span style="color: #28a745; font-weight: bold;">活跃</span>

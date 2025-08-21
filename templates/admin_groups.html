@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}组织管理 - 问卷调查系统{% endblock %}
+
+{% block content %}
+<h1>组织管理</h1>
+
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">管理首页</a> > 组织管理
+</div>
+
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('admin_add_group') }}" class="btn btn-success">添加组织</a>
+    <span style="margin-left: 20px; color: #666;">共 {{ groups|length }} 个组织</span>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if groups %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>组织架构</th>
+                        <th>描述</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in groups %}
+                    <tr>
+                        <td>{{ group.indent|safe }}{{ group.name }}</td>
+                        <td>{{ group.description or '-' }}</td>
+                        <td>{{ group.created_at }}</td>
+                        <td>
+                            {% if group.id != 1 %}
+                                <a href="{{ url_for('admin_edit_group', group_id=group.id) }}" 
+                                   class="btn btn-warning" style="font-size: 12px; padding: 5px 10px;">编辑</a>
+                                <form method="post" action="{{ url_for('admin_delete_group', group_id=group.id) }}" 
+                                      style="display: inline;" 
+                                      onsubmit="return confirm('确定要删除组织 {{ group.name }} 吗？请先确保没有子组织和用户。')">
+                                    <button type="submit" class="btn btn-danger" style="font-size: 12px; padding: 5px 10px;">删除</button>
+                                </form>
+                            {% else %}
+                                <span style="color: #999; font-size: 12px;">系统组织</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div style="text-align: center; padding: 50px 20px;">
+                <h3 style="color: #666; margin-bottom: 20px;">暂无组织</h3>
+                <p style="color: #999;">点击上方按钮添加第一个组织</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">
+        <h3>组织架构说明</h3>
+    </div>
+    <div class="card-body">
+        <ul>
+            <li><strong>多层级结构</strong>：支持部门/科室等多级组织架构</li>
+            <li><strong>权限继承</strong>：子组织用户可以访问父组织的问卷</li>
+            <li><strong>示例结构</strong>：财务处 > 采购科 > 采购员</li>
+            <li><strong>删除限制</strong>：删除组织前需先清空所有子组织和用户</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

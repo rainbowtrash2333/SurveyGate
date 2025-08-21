@@ -10,26 +10,27 @@
     <a href="{{ url_for('admin_users') }}">用户管理</a> > 批量导入
 </div>
 
-<div style="max-width: 600px;">
+<div style="max-width: 700px;">
     <div class="card">
         <div class="card-header">
             <h3>CSV 文件导入</h3>
         </div>
         <div class="card-body">
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-                <h4>文件格式说明：</h4>
-                <ul>
-                    <li>请上传 CSV 格式文件</li>
-                    <li>每行包含两列：用户名,密码</li>
-                    <li>不需要表头，直接从第一行开始数据</li>
-                    <li>示例：user1,password1</li>
-                </ul>
-            </div>
-            
             <form method="post" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="csv_file">选择 CSV 文件:</label>
                     <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default_group_id">默认组织:</label>
+                    <select id="default_group_id" name="default_group_id">
+                        <option value="">不分组</option>
+                        {% for group in all_groups %}
+                            <option value="{{ group.id }}">{{ group.full_path }}</option>
+                        {% endfor %}
+                    </select>
+                    <small style="color: #666;">当CSV文件中未指定组织时，使用此默认组织</small>
                 </div>
                 
                 <div class="form-group">
@@ -42,12 +43,41 @@
     
     <div class="card">
         <div class="card-header">
+            <h3>文件格式说明</h3>
+        </div>
+        <div class="card-body">
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                <h4>支持两种格式：</h4>
+                <ul>
+                    <li><strong>格式1（基础）</strong>：用户名,密码</li>
+                    <li><strong>格式2（含组织）</strong>：用户名,密码,组织路径</li>
+                </ul>
+                <p><strong>注意事项：</strong></p>
+                <ul>
+                    <li>请上传 CSV 格式文件，编码为 UTF-8</li>
+                    <li>不需要表头，直接从第一行开始数据</li>
+                    <li>组织路径需要完整路径，如：财务处/采购科</li>
+                    <li><strong>不存在的组织将自动创建</strong> - 系统会自动创建路径中的所有组织</li>
+                    <li>如果CSV中未指定组织，将使用上面选择的默认组织</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
             <h3>示例 CSV 内容</h3>
         </div>
         <div class="card-body">
+            <h5>格式1（基础格式）：</h5>
             <pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; font-family: monospace;">user1,password123
 user2,password456
 user3,password789</pre>
+            
+            <h5 style="margin-top: 20px;">格式2（包含组织）：</h5>
+            <pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; font-family: monospace;">user1,password123,财务处
+user2,password456,财务处/采购科
+user3,password789,人事处/培训科</pre>
         </div>
     </div>
 </div>

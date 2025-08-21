@@ -32,6 +32,7 @@ DEFAULT_LIMESURVEY_CONFIG = {
 # 数据库初始化
 def init_db():
     conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row  # 设置 row_factory
     cursor = conn.cursor()
     
     # 用户组表 - 支持多层级
@@ -107,20 +108,86 @@ def init_db():
         )
     ''')
     
-    # 创建默认用户组
-    cursor.execute('INSERT OR IGNORE INTO user_groups (name, parent_id, full_path, description) VALUES (?, ?, ?, ?)', 
-                   ('根组织', None, '根组织', '系统默认根组织'))
+    # 检查并创建默认用户组
+    root_group = cursor.execute('SELECT id FROM user_groups WHERE name = ? AND parent_id IS NULL', ('根组织',)).fetchone()
+    if not root_group:
+        cursor.execute('''
+            INSERT INTO user_groups (name, parent_id, full_path, description) 
+            VALUES (?, ?, ?, ?)
+        ''', ('根组织', None, '根组织', '系统默认根组织'))
+        root_group_id = cursor.lastrowid
+        print(f"✓ 创建根组织 (ID: {root_group_id})")
+    else:
+        root_group_id = root_group['id']
+        print(f"✓ 根组织已存在 (ID: {root_group_id})")
     
-    # 插入默认管理员账号
-    admin_password_hash = hashlib.sha256(DEFAULT_ADMIN['password'].encode()).hexdigest()
-    cursor.execute('''
-        INSERT OR IGNORE INTO users (username, password_hash, is_admin, group_id)
-        VALUES (?, ?, ?, 1)
-    ''', (DEFAULT_ADMIN['username'], admin_password_hash, True))
+    # 插入默认管理员账号并确保关联到根组织
+    admin_exists = cursor.execute('SELECT id, group_id FROM users WHERE username = ?', (DEFAULT_ADMIN['username'],)).fetchone()
+    if not admin_exists:
+        admin_password_hash = hashlib.sha256(DEFAULT_ADMIN['password'].encode()).hexdigest()
+        cursor.execute('''
+            INSERT INTO users (username, password_hash, is_admin, group_id)
+            VALUES (?, ?, ?, ?)
+        ''', (DEFAULT_ADMIN['username'], admin_password_hash, True, root_group_id))
+        print(f"✓ 创建默认管理员账号: {DEFAULT_ADMIN['username']}")
+    else:
+        # 如果管理员已存在但没有分配到根组织，则更新
+        if admin_exists['group_id'] != root_group_id:
+            cursor.execute('''
+                UPDATE users SET group_id = ? WHERE username = ?
+            ''', (root_group_id, DEFAULT_ADMIN['username']))
+            print(f"✓ 更新管理员账号组织关联: {DEFAULT_ADMIN['username']} -> 根组织")
+        else:
+            print(f"✓ 管理员账号已存在: {DEFAULT_ADMIN['username']}")
     
     # 插入默认配置
+    config_count = 0
     for key, value in DEFAULT_LIMESURVEY_CONFIG.items():
-        cursor.execute('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)', (key, value))
+        config_exists = cursor.execute('SELECT key FROM config WHERE key = ?', (key,)).fetchone()
+        if not config_exists:
+            cursor.execute('INSERT INTO config (key, value) VALUES (?, ?)', (key, value))
+            config_count += 1
+    if config_count > 0:
+        print(f"✓ 创建 {config_count} 个默认配置项")
+    else:
+        print("✓ 默认配置已存在")
+    
+    conn.commit()
+    conn.close()
+
+def clean_duplicate_root_groups():
+    """清理重复的根组织，只保留第一个"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 查找所有根组织（parent_id为NULL的组织）
+    root_groups = cursor.execute('''
+        SELECT id, name FROM user_groups 
+        WHERE parent_id IS NULL 
+        ORDER BY id
+    ''').fetchall()
+    
+    if len(root_groups) > 1:
+        # 保留第一个根组织，删除其他的
+        keep_root_id = root_groups[0]['id']
+        
+        for i in range(1, len(root_groups)):
+            duplicate_root_id = root_groups[i]['id']
+            
+            # 将引用重复根组织的用户转移到保留的根组织
+            cursor.execute('''
+                UPDATE users SET group_id = ? WHERE group_id = ?
+            ''', (keep_root_id, duplicate_root_id))
+            
+            # 将重复根组织的子组织的parent_id更新为保留的根组织
+            cursor.execute('''
+                UPDATE user_groups SET parent_id = ? WHERE parent_id = ?
+            ''', (keep_root_id, duplicate_root_id))
+            
+            # 删除重复的根组织
+            cursor.execute('DELETE FROM user_groups WHERE id = ?', (duplicate_root_id,))
+            
+            print(f"清理重复根组织: {root_groups[i]['name']} (ID: {duplicate_root_id})")
     
     conn.commit()
     conn.close()
@@ -1082,5 +1149,13 @@ def admin_config():
 
 # -------------------------------
 if __name__ == "__main__":
+    print("🚀 启动问卷调查系统...")
+    print("📋 初始化数据库...")
     init_db()
+    print("🧹 清理重复数据...")
+    clean_duplicate_root_groups()
+    print("✅ 系统启动完成！")
+    print("🌐 访问地址: http://localhost:5000")
+    print("👤 默认管理员: admin / admin123")
+    print("-" * 50)
     app.run(host="0.0.0.0", port=5000, debug=True)
